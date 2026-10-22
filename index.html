@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GUITAR HERO: NEON</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #05050a;
+            color: #f3f4f6;
+            overflow-x: hidden;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .neon-glow-cyan {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.5), inset 0 0 15px rgba(6, 182, 212, 0.2);
+        }
+        .neon-glow-magenta {
+            box-shadow: 0 0 20px rgba(236, 72, 153, 0.5), inset 0 0 15px rgba(236, 72, 153, 0.2);
+        }
+        .neon-glow-amber {
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.5), inset 0 0 15px rgba(245, 158, 11, 0.2);
+        }
+        .text-glow {
+            text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; filter: drop-shadow(0 0 12px #06b6d4); }
+        }
+        .animate-pulse-glow {
+            animation: pulseGlow 2s infinite;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #06b6d4;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-4 selection:bg-cyan-500 selection:text-black">
+
+    <!-- Header -->
+    <header class="w-full max-w-5xl flex items-center justify-between bg-slate-900/80 backdrop-blur border border-cyan-500/30 rounded-2xl px-6 py-4 shadow-2xl mb-4">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-fuchsia-500 flex items-center justify-center font-orbitron font-black text-xl text-black neon-glow-cyan">
+                GH
+            </div>
+            <div>
+                <h1 class="font-orbitron font-black text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-amber-400 text-glow">
+                    GUITAR<span class="text-white">HERO</span> <span class="text-xs text-cyan-400 font-bold tracking-widest">[NEON]</span>
+                </h1>
+                <p class="text-xs text-slate-400">Teachable Machine & Web Audio Rhythm Game</p>
+            </div>
+        </div>
+        <div id="game-stats" class="hidden items-center space-x-6">
+            <div class="text-right">
+                <div class="text-xs text-slate-400 uppercase tracking-widest font-orbitron">Pontuação</div>
+                <div id="hud-score" class="text-xl font-orbitron font-black text-cyan-400">0</div>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-slate-400 uppercase tracking-widest font-orbitron">Combo</div>
+                <div id="hud-combo" class="text-xl font-orbitron font-black text-fuchsia-400">0x</div>
+            </div>
+            <div class="w-32 bg-slate-800 rounded-full h-3 border border-slate-700 overflow-hidden">
+                <div id="hud-health" class="bg-gradient-to-r from-cyan-500 to-fuchsia-500 h-full w-full transition-all duration-300"></div>
+            </div>
+            <button id="btn-quit" class="px-4 py-2 bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/50 rounded-xl text-xs font-orbitron font-bold transition">SAIR</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="w-full max-w-5xl flex-1 flex flex-col items-center justify-center relative">
+
+        <!-- Menu Screen -->
+        <div id="screen-menu" class="w-full bg-slate-900/90 backdrop-blur-xl border border-cyan-500/40 rounded-3xl p-8 shadow-2xl flex flex-col gap-6">
+            <div class="text-center">
+                <h2 class="font-orbitron text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-amber-400">
+                    SELECIONE SUA EXPERIÊNCIA
+                </h2>
+                <p class="text-slate-400 text-sm mt-1">Jogue com a Câmera (IA Corporal) ou pelo Teclado.</p>
+            </div>
+
+            <!-- Configuration Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Mode Settings -->
+                <div class="bg-slate-950/60 p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-orbitron text-sm font-bold text-cyan-400 mb-3 uppercase tracking-wider">1. Modo de Jogo</h3>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <button id="mode-cam" onclick="setGameMode('camera')" class="p-3 rounded-xl border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-orbitron text-xs font-bold transition flex items-center justify-center gap-2">
+                                📷 Câmera (IA)
+                            </button>
+                            <button id="mode-key" onclick="setGameMode('keyboard')" class="p-3 rounded-xl border border-slate-700 bg-slate-900 text-slate-400 font-orbitron text-xs font-bold transition flex items-center justify-center gap-2">
+                                ⌨️ Teclado
+                            </button>
+                        </div>
+
+                        <!-- TM Setup Panel -->
+                        <div id="panel-camera-setup" class="space-y-3">
+                            <label class="block text-xs font-semibold text-slate-300">Link do Teachable Machine:</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="input-tm-url" value="https://teachablemachine.withgoogle.com/models/yMgoTfowh/" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-cyan-500 outline-none">
+                                <button onclick="loadTrainedModel()" class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-black font-orbitron font-bold text-xs rounded-xl transition">Carregar IA</button>
+                            </div>
+                            <div id="tm-status" class="text-xs text-amber-400 font-medium">Status: IA pronta para carregar (2 Pistas: Esquerda / Direita).</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-slate-800">
+                        <h3 class="font-orbitron text-sm font-bold text-cyan-400 mb-3 uppercase tracking-wider">Dificuldade</h3>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="setDifficulty('easy')" id="diff-easy" class="py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 font-orbitron text-xs font-bold transition">Fácil</button>
+                            <button onclick="setDifficulty('medium')" id="diff-medium" class="py-2 rounded-xl border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-orbitron text-xs font-bold transition">Médio</button>
+                            <button onclick="setDifficulty('hard')" id="diff-hard" class="py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 font-orbitron text-xs font-bold transition">Difícil</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Song Selector -->
+                <div class="bg-slate-950/60 p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-orbitron text-sm font-bold text-fuchsia-400 mb-3 uppercase tracking-wider">2. Escolha a Música</h3>
+                        <div id="song-list" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+                    <div class="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
+                        <div class="text-xs text-slate-400">Meta final: <span id="lbl-goal" class="text-cyan-400 font-bold">15.000 pts</span></div>
+                        <button onclick="startGame()" class="px-8 py-3 bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-amber-500 text-black font-orbitron font-black text-sm rounded-xl shadow-lg hover:scale-105 transition transform">
+                            INICIAR JOGO 🚀
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gameplay Canvas Screen -->
+        <div id="screen-game" class="hidden w-full flex flex-col items-center relative">
+            <div id="song-banner" class="mb-2 text-center font-orbitron text-xs text-cyan-400 font-bold tracking-widest uppercase">Música Selecionada</div>
+            <div id="speed-alert" class="absolute top-10 font-orbitron text-xl font-black text-amber-400 text-glow opacity-0 transition-opacity duration-500 pointer-events-none z-20">SPEED UP! ⚡</div>
+            
+            <div class="relative w-full max-w-2xl h-[550px] bg-slate-950 border-2 border-cyan-500/50 rounded-2xl overflow-hidden shadow-2xl neon-glow-cyan">
+                <canvas id="game-canvas" class="w-full h-full block"></canvas>
+                
+                <!-- Webcam Mini Preview (Camera Mode) -->
+                <div id="webcam-container" class="hidden absolute top-4 right-4 w-36 h-28 bg-slate-900 border-2 border-fuchsia-500 rounded-xl overflow-hidden shadow-lg z-10 flex flex-col items-center justify-center">
+                    <div id="webcam-box" class="w-full h-full relative"></div>
+                    <div class="absolute bottom-1 px-2 py-0.5 bg-black/70 rounded text-[9px] font-orbitron text-fuchsia-400">IA VISION</div>
+                </div>
+
+                <!-- Lane Activity Indicators (Bottom HUD) -->
+                <div id="lane-indicators" class="absolute bottom-0 w-full flex justify-around p-2 pointer-events-none">
+                    <!-- Populated dynamically based on lane count -->
+                </div>
+            </div>
+        </div>
+
+        <!-- GameOver / Victory Modal -->
+        <div id="screen-modal" class="hidden absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50">
+            <div class="bg-slate-900 border-2 border-cyan-500 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl neon-glow-cyan">
+                <h3 id="modal-title" class="font-orbitron text-3xl font-black text-cyan-400 mb-2">FIM DE JOGO</h3>
+                <p id="modal-desc" class="text-slate-300 text-sm mb-6">Você completou a faixa com sucesso!</p>
+                
+                <div class="bg-slate-950 p-4 rounded-2xl mb-6 border border-slate-800 space-y-2">
+                    <div class="flex justify-between text-xs text-slate-400 font-orbitron"><span>PONTUAÇÃO FINAL:</span> <span id="final-score" class="text-cyan-400 font-bold text-sm">0</span></div>
+                    <div class="flex justify-between text-xs text-slate-400 font-orbitron"><span>MAIOR COMBO:</span> <span id="final-combo" class="text-fuchsia-400 font-bold text-sm">0x</span></div>
+                    <div class="flex justify-between text-xs text-slate-400 font-orbitron"><span>PRECISÃO:</span> <span id="final-accuracy" class="text-amber-400 font-bold text-sm">100%</span></div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="returnToMenu()" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white font-orbitron font-bold text-xs rounded-xl transition">MENU</button>
+                    <button onclick="startGame()" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-fuchsia-500 text-black font-orbitron font-black text-xs rounded-xl transition">JOGAR NOVAMENTE</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-4 text-center text-xs text-slate-500 font-orbitron">
+        GUITAR HERO: NEON &bull; WebAudio & Teachable Machine Engine
+    </footer>
+
+    <script>
+        // Note Frequency Constants
+        const C3 = 130.81, D3 = 146.83, E3 = 164.81, F3 = 174.61, G3 = 196.00, A3 = 220.00, B3 = 246.94;
+        const Ab3 = 207.65, Bb3 = 233.08;
+        const C4 = 261.63, Cs4 = 277.18, D4 = 293.66, Eb4 = 311.13, E4 = 329.63, F4 = 349.23, Fs4 = 369.99, G4 = 392.00, Gs4 = 415.30, A4 = 440.00, Bb4 = 466.16, B4 = 493.88;
+        const Ab4 = 415.30;
+        const C5 = 523.25, D5 = 587.33, Eb5 = 622.25, E5 = 659.25, F5 = 698.46, Fs5 = 739.99, G5 = 783.99, A5 = 880.00;
+
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            playTone(freq, type = 'square', duration = 0.15, vol = 0.1) {
+                try {
+                    this.init();
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {}
+            }
+        }
+
+        const audioEngine = new AudioEngine();
+
+        // Extended Song Definitions (Pop, Synthwave & Rock)
+        const SONGS = [
+            {
+                id: 'blindingLights',
+                name: 'Blinding Lights',
+                artist: 'The Weeknd',
+                bpm: 171,
+                goal: 14000,
+                melody: [
+                    F4, A4, C5, F5, E5, D5, C5, A4,
+                    F4, A4, C5, F5, E5, D5, C5, A4,
+                    G4, Bb4, D5, G5, F5, Eb5, D5, Bb4,
+                    G4, Bb4, D5, G5, F5, Eb5, D5, Bb4,
+                    A4, C5, E5, A5, G5, F5, E5, C5,
+                    A4, C5, E5, A5, G5, F5, E5, C5,
+                    F4, A4, C5, F5, E5, D5, C5, A4,
+                    G4, Bb4, D5, G5, F5, Eb5, D5, Bb4
+                ]
+            },
+            {
+                id: 'takeOnMe',
+                name: 'Take On Me',
+                artist: 'A-ha',
+                bpm: 168,
+                goal: 13000,
+                melody: [
+                    Fs4, Fs4, D4, B3, B3, E4, E4, E4,
+                    Gs4, Gs4, A4, B4, A4, A4, E4, D4,
+                    Fs4, Fs4, D4, B3, B3, E4, E4, E4,
+                    Gs4, Gs4, A4, B4, A4, A4, E4, D4,
+                    D5, B4, A4, G4, D5, B4, G4, E4,
+                    D5, B4, A4, G4, E5, E5, Fs5, G5
+                ]
+            },
+            {
+                id: 'sweetDreams',
+                name: 'Sweet Dreams',
+                artist: 'Eurythmics',
+                bpm: 126,
+                goal: 11000,
+                melody: [
+                    C4, C4, C4, Ab3, F3, G3, Ab3, Bb3,
+                    C4, C4, C4, Ab3, F3, G3, Ab3, Bb3,
+                    C5, C5, C5, Ab4, F4, G4, Ab4, Bb4,
+                    C5, C5, C5, Ab4, F4, G4, Ab4, Bb4,
+                    C4, Eb4, G4, C5, Bb4, Ab4, G4, F4,
+                    C4, Eb4, G4, C5, Bb4, Ab4, G4, F4
+                ]
+            },
+            {
+                id: 'sevenNation',
+                name: 'Seven Nation Army',
+                artist: 'The White Stripes',
+                bpm: 120,
+                goal: 10000,
+                melody: [
+                    E4, E4, G4, E4, D4, C4, B3,
+                    E4, E4, G4, E4, D4, C4, D4, C4, B3,
+                    E4, E4, G4, E4, D4, C4, B3,
+                    A3, C4, B3, A3, G3, A3
+                ]
+            },
+            {
+                id: 'mortalKombat',
+                name: 'Mortal Kombat Theme',
+                artist: 'Techno Syndrome',
+                bpm: 135,
+                goal: 12000,
+                melody: [
+                    A3, A3, C4, A3, D4, A3, Eb4, D4,
+                    A3, A3, F4, A3, E4, A3, D4, C4,
+                    A3, A3, C4, A3, D4, A3, Eb4, D4,
+                    G4, G4, Bb4, G4, C5, G4, D5, C5
+                ]
+            }
+        ];
+
+        class TMEngine {
+            constructor() {
+                this.model = null;
+                this.webcam = null;
+                this.maxPredictions = 0;
+                this.isInitialized = false;
+            }
+            async load(url) {
+                try {
+                    const modelURL = url.endsWith('/') ? url + 'model.json' : url + '/model.json';
+                    const metadataURL = url.endsWith('/') ? url + 'metadata.json' : url + '/metadata.json';
+                    
+                    document.getElementById('tm-status').innerText = "Carregando modelo de IA...";
+                    this.model = await tmPose.load(modelURL, metadataURL);
+                    this.maxPredictions = this.model.getTotalClasses();
+                    
+                    const flip = true;
+                    this.webcam = new tmPose.Webcam(160, 120, flip);
+                    await this.webcam.setup();
+                    await this.webcam.play();
+                    window.requestAnimationFrame(() => this.loop());
+
+                    const webcamBox = document.getElementById('webcam-box');
+                    webcamBox.innerHTML = '';
+                    webcamBox.appendChild(this.webcam.canvas);
+                    this.webcam.canvas.className = "w-full h-full object-cover rounded-xl";
+
+                    this.isInitialized = true;
+                    document.getElementById('tm-status').innerText = "IA Pronta! Câmera ativa.";
+                    document.getElementById('tm-status').className = "text-xs text-emerald-400 font-medium";
+                    return true;
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('tm-status').innerText = "Erro ao carregar IA. Verifique o link ou permissão.";
+                    document.getElementById('tm-status').className = "text-xs text-rose-400 font-medium";
+                    return false;
+                }
+            }
+            loop() {
+                if (this.webcam) {
+                    this.webcam.update();
+                    this.predict();
+                    window.requestAnimationFrame(() => this.loop());
+                }
+            }
+            async predict() {
+                if (!this.model || !this.webcam || !window.activeGame) return;
+                const { pose, posenetOutput } = await this.model.estimatePose(this.webcam.canvas);
+                const prediction = await this.model.predict(posenetOutput);
+                
+                let bestClass = "";
+                let maxProb = 0.0;
+                for (let i = 0; i < this.maxPredictions; i++) {
+                    if (prediction[i].probability > maxProb) {
+                        maxProb = prediction[i].probability;
+                        bestClass = prediction[i].className.toLowerCase();
+                    }
+                }
+
+                if (maxProb > 0.75) {
+                    if (bestClass.includes('esq') || bestClass.includes('left') || bestClass.includes('1')) {
+                        window.activeGame.triggerCameraInput(0);
+                    } else if (bestClass.includes('dir') || bestClass.includes('right') || bestClass.includes('2')) {
+                        window.activeGame.triggerCameraInput(1);
+                    }
+                }
+            }
+            stop() {
+                if (this.webcam) {
+                    this.webcam.stop();
+                    this.webcam = null;
+                }
+                this.isInitialized = false;
+            }
+        }
+
+        const tmEngine = new TMEngine();
+
+        class RhythmGame {
+            constructor() {
+                this.canvas = document.getElementById('game-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.mode = 'camera'; // 'camera' (2 lanes) or 'keyboard' (4 lanes)
+                this.selectedSong = SONGS[0];
+                this.difficulty = 'medium';
+                this.score = 0;
+                this.combo = 0;
+                this.maxCombo = 0;
+                this.health = 100;
+                this.notesHit = 0;
+                this.totalNotesSpawned = 0;
+                this.isPlaying = false;
+                this.notes = [];
+                this.spawnTimer = 0;
+                this.animId = null;
+                this.speedMultiplier = 1.0;
+                this.lastSpawnNoteIndex = 0;
+                
+                // Key bindings for keyboard mode (4 lanes)
+                this.keyMap = { 'KeyD': 0, 'KeyF': 1, 'KeyJ': 2, 'KeyK': 3 };
+                this.activeKeys = [false, false, false, false];
+                this.cameraActiveLanes = [false, false];
+
+                this.boundKeydown = this.handleKeydown.bind(this);
+                this.boundKeyup = this.handleKeyup.bind(this);
+            }
+
+            get laneCount() {
+                return this.mode === 'camera' ? 2 : 4;
+            }
+
+            init() {
+                window.addEventListener('keydown', this.boundKeydown);
+                window.addEventListener('keyup', this.boundKeyup);
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            resizeCanvas() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+            }
+
+            handleKeydown(e) {
+                if (!this.isPlaying) return;
+                if (this.mode === 'keyboard' && this.keyMap.hasOwnProperty(e.code)) {
+                    const lane = this.keyMap[e.code];
+                    this.activeKeys[lane] = true;
+                    this.checkHit(lane);
+                }
+            }
+
+            handleKeyup(e) {
+                if (this.mode === 'keyboard' && this.keyMap.hasOwnProperty(e.code)) {
+                    const lane = this.keyMap[e.code];
+                    this.activeKeys[lane] = false;
+                }
+            }
+
+            triggerCameraInput(lane) {
+                if (!this.isPlaying || this.mode !== 'camera') return;
+                if (!this.cameraActiveLanes[lane]) {
+                    this.cameraActiveLanes[lane] = true;
+                    this.checkHit(lane);
+                    setTimeout(() => { this.cameraActiveLanes[lane] = false; }, 180);
+                }
+            }
+
+            start() {
+                this.score = 0;
+                this.combo = 0;
+                this.maxCombo = 0;
+                this.health = 100;
+                this.notesHit = 0;
+                this.totalNotesSpawned = 0;
+                this.notes = [];
+                this.spawnTimer = 0;
+                this.speedMultiplier = this.difficulty === 'easy' ? 0.8 : (this.difficulty === 'medium' ? 1.0 : 1.3);
+                this.lastSpawnNoteIndex = 0;
+                this.isPlaying = true;
+
+                document.getElementById('screen-menu').classList.add('hidden');
+                document.getElementById('screen-modal').classList.add('hidden');
+                document.getElementById('screen-game').classList.remove('hidden');
+                document.getElementById('game-stats').classList.remove('hidden');
+                document.getElementById('song-banner').innerText = `${this.selectedSong.name} - ${this.selectedSong.artist}`;
+
+                const webcamContainer = document.getElementById('webcam-container');
+                if (this.mode === 'camera') {
+                    webcamContainer.classList.remove('hidden');
+                } else {
+                    webcamContainer.classList.add('hidden');
+                }
+
+                this.updateHud();
+                this.loop();
+            }
+
+            spawnNote() {
+                const melody = this.selectedSong.melody;
+                const noteFreq = melody[this.lastSpawnNoteIndex % melody.length];
+                this.lastSpawnNoteIndex++;
+
+                const lane = Math.floor(Math.random() * this.laneCount);
+                const speedSetting = this.difficulty === 'easy' ? 3.0 : (this.difficulty === 'medium' ? 4.2 : 5.8);
+
+                this.notes.push({
+                    lane: lane,
+                    y: -40,
+                    speed: speedSetting * this.speedMultiplier,
+                    freq: noteFreq,
+                    hit: false
+                });
+                this.totalNotesSpawned++;
+            }
+
+            checkHit(lane) {
+                const hitLineY = this.canvas.height - 90;
+                const tolerance = 45;
+
+                let closestNote = null;
+                let minDist = Infinity;
+
+                for (let note of this.notes) {
+                    if (!note.hit && note.lane === lane) {
+                        const dist = Math.abs(note.y - hitLineY);
+                        if (dist < minDist && dist < tolerance) {
+                            minDist = dist;
+                            closestNote = note;
+                        }
+                    }
+                }
+
+                if (closestNote) {
+                    closestNote.hit = true;
+                    this.notesHit++;
+                    this.combo++;
+                    if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+
+                    const addScore = Math.round(100 * (1 + (this.combo * 0.05)));
+                    this.score += addScore;
+                    this.health = Math.min(100, this.health + 4);
+
+                    audioEngine.playTone(closestNote.freq, 'sine', 0.2, 0.15);
+                    this.checkMilestone();
+                } else {
+                    this.combo = 0;
+                    this.health = Math.max(0, this.health - 6);
+                    audioEngine.playTone(100, 'sawtooth', 0.1, 0.05);
+                    if (this.health <= 0) {
+                        this.gameOver(false);
+                    }
+                }
+                this.updateHud();
+            }
+
+            checkMilestone() {
+                const goal = this.selectedSong.goal;
+                if (this.score >= goal) {
+                    this.gameOver(true);
+                } else if (this.score >= goal * 0.75 && this.speedMultiplier < 1.6) {
+                    this.triggerSpeedUp();
+                } else if (this.score >= goal * 0.45 && this.speedMultiplier < 1.3) {
+                    this.triggerSpeedUp();
+                }
+            }
+
+            triggerSpeedUp() {
+                this.speedMultiplier += 0.25;
+                for (let note of this.notes) {
+                    note.speed *= 1.2;
+                }
+                const alertEl = document.getElementById('speed-alert');
+                alertEl.classList.remove('opacity-0');
+                setTimeout(() => alertEl.classList.add('opacity-0'), 1500);
+            }
+
+            updateHud() {
+                document.getElementById('hud-score').innerText = this.score;
+                document.getElementById('hud-combo').innerText = this.combo + 'x';
+                document.getElementById('hud-health').style.width = this.health + '%';
+            }
+
+            loop() {
+                if (!this.isPlaying) return;
+
+                // Spawn timing calculation based on BPM
+                const spawnInterval = Math.max(35, Math.floor(12000 / this.selectedSong.bpm / this.speedMultiplier));
+                this.spawnTimer++;
+                if (this.spawnTimer >= spawnInterval) {
+                    this.spawnTimer = 0;
+                    this.spawnNote();
+                }
+
+                this.update();
+                this.render();
+
+                this.animId = requestAnimationFrame(() => this.loop());
+            }
+
+            update() {
+                const hitLineY = this.canvas.height - 90;
+                for (let i = this.notes.length - 1; i >= 0; i--) {
+                    let note = this.notes[i];
+                    note.y += note.speed;
+
+                    // Missed note check
+                    if (!note.hit && note.y > hitLineY + 50) {
+                        note.hit = true;
+                        this.combo = 0;
+                        this.health = Math.max(0, this.health - 8);
+                        audioEngine.playTone(80, 'sawtooth', 0.1, 0.05);
+                        this.updateHud();
+                        if (this.health <= 0) {
+                            this.gameOver(false);
+                            return;
+                        }
+                    }
+
+                    // Remove off-screen notes
+                    if (note.y > this.canvas.height + 50) {
+                        this.notes.splice(i, 1);
+                    }
+                }
+            }
+
+            render() {
+                const ctx = this.ctx;
+                ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                const lanes = this.laneCount;
+                const laneWidth = this.canvas.width / lanes;
+
+                // Draw lanes and hit line
+                const hitLineY = this.canvas.height - 90;
+                for (let i = 0; i < lanes; i++) {
+                    const x = i * laneWidth;
+                    ctx.strokeStyle = 'rgba(6, 182, 212, 0.15)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, this.canvas.height);
+                    ctx.stroke();
+
+                    // Active glow if key/cam triggered
+                    const isActive = (this.mode === 'keyboard' && this.activeKeys[i]) || (this.mode === 'camera' && this.cameraActiveLanes[i]);
+                    if (isActive) {
+                        ctx.fillStyle = 'rgba(6, 182, 212, 0.12)';
+                        ctx.fillRect(x, 0, laneWidth, this.canvas.height);
+                    }
+                }
+
+                // Hit Line Bar
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 4;
+                ctx.shadowColor = '#06b6d4';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.moveTo(0, hitLineY);
+                ctx.lineTo(this.canvas.width, hitLineY);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Render notes
+                for (let note of this.notes) {
+                    if (note.hit) continue;
+                    const x = note.lane * laneWidth + laneWidth / 2;
+                    const radius = 22;
+
+                    ctx.save();
+                    ctx.shadowColor = note.lane % 2 === 0 ? '#06b6d4' : '#ec4899';
+                    ctx.shadowBlur = 12;
+                    ctx.fillStyle = note.lane % 2 === 0 ? '#22d3ee' : '#f472b6';
+                    ctx.beginPath();
+                    ctx.arc(x, note.y, radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+
+                    ctx.fillStyle = '#05050a';
+                    ctx.font = 'bold 11px Orbitron';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.mode === 'keyboard' ? ['D','F','J','K'][note.lane] : (note.lane === 0 ? 'ESQ' : 'DIR'), x, note.y);
+                }
+
+                // Update Bottom Lane Indicators UI
+                const indicatorsContainer = document.getElementById('lane-indicators');
+                if (indicatorsContainer.children.length !== lanes) {
+                    indicatorsContainer.innerHTML = '';
+                    for (let i = 0; i < lanes; i++) {
+                        const div = document.createElement('div');
+                        div.className = `flex-1 text-center font-orbitron text-xs font-bold py-1.5 mx-1 rounded-lg border transition ${
+                            (this.mode === 'keyboard' && this.activeKeys[i]) || (this.mode === 'camera' && this.cameraActiveLanes[i])
+                            ? 'bg-cyan-500 text-black border-cyan-300 shadow-[0_0_15px_#06b6d4]' 
+                            : 'bg-slate-900/80 text-cyan-400 border-cyan-500/30'
+                        }`;
+                        div.innerText = this.mode === 'keyboard' ? ['D (P1)', 'F (P2)', 'J (P3)', 'K (P4)'][i] : (i === 0 ? '◀ ESQUERDA' : 'DIREITA ▶');
+                        indicatorsContainer.appendChild(div);
+                    }
+                } else {
+                    for (let i = 0; i < lanes; i++) {
+                        const child = indicatorsContainer.children[i];
+                        const isActive = (this.mode === 'keyboard' && this.activeKeys[i]) || (this.mode === 'camera' && this.cameraActiveLanes[i]);
+                        child.className = `flex-1 text-center font-orbitron text-xs font-bold py-1.5 mx-1 rounded-lg border transition ${
+                            isActive 
+                            ? 'bg-cyan-500 text-black border-cyan-300 shadow-[0_0_15px_#06b6d4]' 
+                            : 'bg-slate-900/80 text-cyan-400 border-cyan-500/30'
+                        }`;
+                    }
+                }
+            }
+
+            gameOver(isVictory) {
+                this.isPlaying = false;
+                cancelAnimationFrame(this.animId);
+
+                document.getElementById('screen-game').classList.add('hidden');
+                document.getElementById('game-stats').classList.add('hidden');
+                document.getElementById('screen-modal').classList.remove('hidden');
+
+                const titleEl = document.getElementById('modal-title');
+                const descEl = document.getElementById('modal-desc');
+
+                if (isVictory) {
+                    titleEl.innerText = "VITÓRIA! 🎉";
+                    titleEl.className = "font-orbitron text-3xl font-black text-amber-400 mb-2";
+                    descEl.innerText = `Parabéns! Você atingiu a meta de ${this.selectedSong.goal} pontos!`;
+                } else {
+                    titleEl.innerText = "FIM DE JOGO 💥";
+                    titleEl.className = "font-orbitron text-3xl font-black text-rose-500 mb-2";
+                    descEl.innerText = "Sua energia acabou. Tente novamente!";
+                }
+
+                document.getElementById('final-score').innerText = this.score;
+                document.getElementById('final-combo').innerText = this.maxCombo + 'x';
+                const accuracy = this.totalNotesSpawned > 0 ? Math.round((this.notesHit / this.totalNotesSpawned) * 100) : 100;
+                document.getElementById('final-accuracy').innerText = accuracy + '%';
+            }
+
+            quit() {
+                this.isPlaying = false;
+                cancelAnimationFrame(this.animId);
+                document.getElementById('screen-game').classList.add('hidden');
+                document.getElementById('game-stats').classList.add('hidden');
+                document.getElementById('screen-modal').classList.add('hidden');
+                document.getElementById('screen-menu').classList.remove('hidden');
+            }
+        }
+
+        const game = new RhythmGame();
+        window.activeGame = game;
+
+        // UI Handlers
+        function initSongList() {
+            const listEl = document.getElementById('song-list');
+            listEl.innerHTML = '';
+            SONGS.forEach((song, idx) => {
+                const btn = document.createElement('div');
+                btn.className = `p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+                    game.selectedSong.id === song.id ? 'bg-cyan-500/20 border-cyan-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`;
+                btn.onclick = () => {
+                    game.selectedSong = song;
+                    document.getElementById('lbl-goal').innerText = song.goal.toLocaleString() + ' pts';
+                    initSongList();
+                    audioEngine.playTone(SONG_PREVIEW_FREQ(song), 'sine', 0.2, 0.1);
+                };
+                btn.innerHTML = `
+                    <div>
+                        <div class="font-orbitron font-bold text-xs text-white">${song.name}</div>
+                        <div class="text-[10px] text-slate-400">${song.artist} &bull; ${song.bpm} BPM</div>
+                    </div>
+                    <div class="text-[10px] font-orbitron font-bold px-2 py-1 rounded bg-slate-800 text-cyan-400">Meta: ${song.goal}</div>
+                `;
+                listEl.appendChild(btn);
+            });
+        }
+
+        function SONG_PREVIEW_FREQ(song) {
+            return song.melody[0] || 440;
+        }
+
+        function setGameMode(mode) {
+            game.mode = mode;
+            const btnCam = document.getElementById('mode-cam');
+            const btnKey = document.getElementById('mode-key');
+            const panelCam = document.getElementById('panel-camera-setup');
+
+            if (mode === 'camera') {
+                btnCam.className = "p-3 rounded-xl border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-orbitron text-xs font-bold transition flex items-center justify-center gap-2";
+                btnKey.className = "p-3 rounded-xl border border-slate-700 bg-slate-900 text-slate-400 font-orbitron text-xs font-bold transition flex items-center justify-center gap-2";
+                panelCam.classList.remove('hidden');
+            } else {
+                btnKey.className = "p-3 rounded-xl border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-orbitron text-xs font-bold transition flex items-center justify-center gap-2";
+                btnCam.className = "p-3 rounded-xl border border-slate-700 bg-slate-900 text-slate-400 font-orbitron text-xs font-bold transition flex items-center justify-center gap-2";
+                panelCam.classList.add('hidden');
+            }
+        }
+
+        function setDifficulty(diff) {
+            game.difficulty = diff;
+            ['easy', 'medium', 'hard'].forEach(d => {
+                const btn = document.getElementById(`diff-${d}`);
+                if (d === diff) {
+                    btn.className = "py-2 rounded-xl border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-orbitron text-xs font-bold transition";
+                } else {
+                    btn.className = "py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 font-orbitron text-xs font-bold transition";
+                }
+            });
+        }
+
+        async function loadTrainedModel() {
+            const url = document.getElementById('input-tm-url').value.trim();
+            if (!url) return;
+            await tmEngine.load(url);
+        }
+
+        function startGame() {
+            if (game.mode === 'camera' && !tmEngine.isInitialized) {
+                loadTrainedModel().then(success => {
+                    if (success) game.start();
+                });
+            } else {
+                game.start();
+            }
+        }
+
+        function returnToMenu() {
+            game.quit();
+        }
+
+        document.getElementById('btn-quit').onclick = () => game.quit();
+
+        window.onload = () => {
+            game.init();
+            initSongList();
+        };
+    </script>
+</body>
+</html>
